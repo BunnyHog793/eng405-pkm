@@ -31,6 +31,7 @@
 #define C_ENABLE_PIN       19
 #define LIMIT_SWITCH_M6    7
 
+
 #define X_STEP_HIGH             PORTF |=  0b00000001;
 #define X_STEP_LOW              PORTF &= ~0b00000001;
 
@@ -51,6 +52,20 @@
 
 #define TIMER1_INTERRUPTS_ON    TIMSK1 |=  (1 << OCIE1A);
 #define TIMER1_INTERRUPTS_OFF   TIMSK1 &= ~(1 << OCIE1A);
+
+const byte numChars = 32;
+char receivedChars[numChars];
+char tempChars[numChars];
+
+// char command[numChars] = 0;
+int xCom = 0;
+int yCom = 0;
+int zCom = 0;
+int aCom = 0;
+int bCom = 0;
+int cCom = 0;
+
+boolean newData = false;
 
 //steps per mm
 int XstepRate = 1;
@@ -165,6 +180,7 @@ void resetStepperInfo( stepperInfo& si ) {
 volatile stepperInfo steppers[NUM_STEPPERS];
 
 void setup() {
+  Serial.begin(9600);
   int xloc = 0;
   int yloc = 0;
   int zloc = 0;
@@ -428,44 +444,6 @@ void moveStepper(int motor_step_pin, int steps, int interval) {
   }
 }
 
-void goHome(int interval) {
-  //  while (digitalRead(LIMIT_SWITCH_M1) == HIGH ) {
-  while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
-         digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
-         digitalRead(LIMIT_SWITCH_M5) == HIGH || digitalRead(LIMIT_SWITCH_M6) == HIGH) {
-    int ls1 = digitalRead(LIMIT_SWITCH_M1);
-    int ls2 = digitalRead(LIMIT_SWITCH_M2);
-    int ls3 = digitalRead(LIMIT_SWITCH_M3);
-    int ls4 = digitalRead(LIMIT_SWITCH_M4);
-    int ls5 = digitalRead(LIMIT_SWITCH_M5);
-    int ls6 = digitalRead(LIMIT_SWITCH_M6);
-    // Serial.println("Homing...");
-    if (ls1 == HIGH) {
-      moveStepper(X_STEP_PIN, 1, interval);
-    } 
-    if (ls2 == HIGH) {
-      moveStepper(Y_STEP_PIN, 1, interval); 
-    }
-    if (ls3 == HIGH) {
-      moveStepper(Z_STEP_PIN, 1, interval);
-    }
-    if (ls4 == HIGH) {
-      // Serial.println("ls4");
-      moveStepper(A_STEP_PIN, 1, interval);
-    }
-    if (ls5 == HIGH) {
-      // Serial.println("ls5");
-      moveStepper(B_STEP_PIN, 1, interval);
-    }
-    if (ls6 == HIGH) {
-      // Serial.println("ls6");
-      moveStepper(C_STEP_PIN, 1, interval);
-    }
-    delayMicroseconds(interval);
-  }
-  Serial.println("Finished");
-}
-
 void goHome2() {
   while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
          digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
@@ -500,7 +478,7 @@ void goHome2() {
     }
     runAndWait();
   }
-  Serial.println("Finished");
+  Serial.println("Homing Complete");
 }
 
 
@@ -532,33 +510,67 @@ void movePKM(int x, int y, int z, int a, int b, int c) {
 }
 
 void loop() {
-  movePKM(800, 800, 800, 800, 800, 800);
-  goHome2();
-  // delay(200);
- 
-  
-  // movePKM(0, 0, 1200, 1200, 0, 0);
-  // movePKM(0, 0, -1200, -1200, 0, 0);
-  // delay(100);
-  // movePKM(600, 600, 600, 600, 600, 600);
-  // movePKM(-600, -600, -600, -600, -600, -600);
-  
-  // int loop = 0;
-  // while (loop < 100) {
-  //   movePKM(4,4,4,4,4,4);
-  //   ++loop;
-  // }
-     
-
-
-  while (true);
-
+  parseCommand();
 }
 
 
-void ReadLoop()
+void parseCommand() {
+  static byte index = 0;
+  char endMarker = '\n';
+  char command;
+  int commands[6];
 
+  
+  static char num[64];
+  static unsigned int msg_loc = 0;
 
+  while (Serial.available() == 0) {
+      //wait for command;
+    }
+
+    char buf = Serial.read();
+    
+    if (buf == 'H') {
+      // Serial.println("Going Home!");
+      goHome2();
+
+    }
+    
+    else if (buf == 'G') {  
+
+      char com[64];
+      int loc = 0;
+
+      delay(100);
+      while (Serial.available() > 0) {
+
+        char buf2 = Serial.read();
+
+        if (buf2 == '\n') {
+          com[loc] = '\0';
+
+          loc = 0;
+        }
+        else {
+          com[loc] = buf2;
+          ++loc;          
+        }
+                
+      }
+    
+      char *tknInd;
+      char *buffer;
+      char **rem;
+      tknInd = strtok(com, " ");
+      commands[0] = atoi(tknInd);
+      for (int i = 1; i < 6; ++i) {
+          tknInd = strtok(NULL, " ");
+          commands[i] = atoi(tknInd);  
+      }
+      movePKM(commands[0], commands[1], commands[2], commands[3], commands[4], commands[5]);
+      Serial.println("Move Complete");
+    }
+}
 
 
 
