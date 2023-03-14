@@ -24,12 +24,12 @@
 #define B_DIR_PIN          30
 #define B_STEP_PIN         31
 #define B_ENABLE_PIN       16
-#define LIMIT_SWITCH_M5    5
+#define LIMIT_SWITCH_M5    6
 
 #define C_DIR_PIN          32
 #define C_STEP_PIN         33
 #define C_ENABLE_PIN       19
-#define LIMIT_SWITCH_M6    6
+#define LIMIT_SWITCH_M6    7
 
 #define X_STEP_HIGH             PORTF |=  0b00000001;
 #define X_STEP_LOW              PORTF &= ~0b00000001;
@@ -429,10 +429,10 @@ void moveStepper(int motor_step_pin, int steps, int interval) {
 }
 
 void goHome(int interval) {
-   while (digitalRead(LIMIT_SWITCH_M1) == HIGH ) {
-  // while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
-  //        digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
-  //        digitalRead(LIMIT_SWITCH_M5) == HIGH || digitalRead(LIMIT_SWITCH_M6) == HIGH) {
+  //  while (digitalRead(LIMIT_SWITCH_M1) == HIGH ) {
+  while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
+         digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
+         digitalRead(LIMIT_SWITCH_M5) == HIGH || digitalRead(LIMIT_SWITCH_M6) == HIGH) {
     int ls1 = digitalRead(LIMIT_SWITCH_M1);
     int ls2 = digitalRead(LIMIT_SWITCH_M2);
     int ls3 = digitalRead(LIMIT_SWITCH_M3);
@@ -442,26 +442,63 @@ void goHome(int interval) {
     // Serial.println("Homing...");
     if (ls1 == HIGH) {
       moveStepper(X_STEP_PIN, 1, interval);
-    // } 
-    // if (ls2 == HIGH) {
-    //   moveStepper(Y_STEP_PIN, 1, interval); 
-    // }
-    // if (ls3 == HIGH) {
-    //   moveStepper(Z_STEP_PIN, 1, interval);
-    // }
-    // if (ls4 == HIGH) {
-    //   // Serial.println("ls4");
-    //   moveStepper(A_STEP_PIN, 1, interval);
-    // }
-    // if (ls5 == HIGH) {
-    //   // Serial.println("ls5");
-    //   moveStepper(B_STEP_PIN, 1, interval);
-    // }
-    // if (ls6 == HIGH) {
-    //   // Serial.println("ls6");
-    //   moveStepper(C_STEP_PIN, 1, interval);
+    } 
+    if (ls2 == HIGH) {
+      moveStepper(Y_STEP_PIN, 1, interval); 
+    }
+    if (ls3 == HIGH) {
+      moveStepper(Z_STEP_PIN, 1, interval);
+    }
+    if (ls4 == HIGH) {
+      // Serial.println("ls4");
+      moveStepper(A_STEP_PIN, 1, interval);
+    }
+    if (ls5 == HIGH) {
+      // Serial.println("ls5");
+      moveStepper(B_STEP_PIN, 1, interval);
+    }
+    if (ls6 == HIGH) {
+      // Serial.println("ls6");
+      moveStepper(C_STEP_PIN, 1, interval);
     }
     delayMicroseconds(interval);
+  }
+  Serial.println("Finished");
+}
+
+void goHome2() {
+  while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
+         digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
+         digitalRead(LIMIT_SWITCH_M5) == HIGH || digitalRead(LIMIT_SWITCH_M6) == HIGH) {
+    int ls1 = digitalRead(LIMIT_SWITCH_M1);
+    int ls2 = digitalRead(LIMIT_SWITCH_M2);
+    int ls3 = digitalRead(LIMIT_SWITCH_M3);
+    int ls4 = digitalRead(LIMIT_SWITCH_M4);
+    int ls5 = digitalRead(LIMIT_SWITCH_M5);
+    int ls6 = digitalRead(LIMIT_SWITCH_M6);
+    // Serial.println("Homing...");
+    if (ls1 == HIGH) {
+      prepareMovement( 0, 10);
+    } 
+    if (ls2 == HIGH) {
+      prepareMovement( 1, 10);
+    }
+    if (ls3 == HIGH) {
+      prepareMovement( 2, 10);
+    }
+    if (ls4 == HIGH) {
+      // Serial.println("ls4");
+      prepareMovement( 3, 10);
+    }
+    if (ls5 == HIGH) {
+      // Serial.println("ls5");
+      prepareMovement( 4, 10);
+    }
+    if (ls6 == HIGH) {
+      // Serial.println("ls6");
+      prepareMovement( 5, 10);
+    }
+    runAndWait();
   }
   Serial.println("Finished");
 }
@@ -494,17 +531,17 @@ void movePKM(int x, int y, int z, int a, int b, int c) {
   runAndWait();
 }
 
-
 void loop() {
-  goHome(4);
-  delay(200);
+  movePKM(800, 800, 800, 800, 800, 800);
+  goHome2();
+  // delay(200);
  
   
-  movePKM(0, 0, 1200, 1200, 0, 0);
-  movePKM(0, 0, -1200, -1200, 0, 0);
-  delay(100);
-  movePKM(600, 600, 600, 600, 600, 600);
-  movePKM(-600, -600, -600, -600, -600, -600);
+  // movePKM(0, 0, 1200, 1200, 0, 0);
+  // movePKM(0, 0, -1200, -1200, 0, 0);
+  // delay(100);
+  // movePKM(600, 600, 600, 600, 600, 600);
+  // movePKM(-600, -600, -600, -600, -600, -600);
   
   // int loop = 0;
   // while (loop < 100) {
@@ -519,7 +556,7 @@ void loop() {
 }
 
 
-
+void ReadLoop()
 
 
 
