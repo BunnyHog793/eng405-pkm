@@ -1,6 +1,16 @@
-// For RAMPS 1.4 
-//original code from https://www.youtube.com/watch?v=fHAO7SW-SZI || http://www.iforce2d.net/sketches/
-//modified by Christopher Zuehlke
+// PKM-Motor-Controller for 6 Axis Paralel Kinomatics Machine
+// Christpher Zuehlke
+// ENG405 Senior Project
+
+// Commands:
+//    H - Go home
+//    G x y z a b c - move PKM
+//    P - printout the current location of the PKM
+
+// original Stepper Moter move function code from https://www.youtube.com/watch?v=fHAO7SW-SZI || http://www.iforce2d.net/sketches/
+
+
+// Pin assignments will need to change when the shield is used
 #define X_DIR_PIN          22 // PORTB pin 3
 #define X_STEP_PIN         23
 #define X_ENABLE_PIN       4
@@ -31,41 +41,16 @@
 #define C_ENABLE_PIN       19
 #define LIMIT_SWITCH_M6    7
 
-
-#define X_STEP_HIGH             PORTF |=  0b00000001;
-#define X_STEP_LOW              PORTF &= ~0b00000001;
-
-#define Y_STEP_HIGH             PORTF |=  0b01000000;
-#define Y_STEP_LOW              PORTF &= ~0b01000000;
-
-#define Z_STEP_HIGH             PORTL |=  0b00001000;
-#define Z_STEP_LOW              PORTL &= ~0b00001000;
-
-#define A_STEP_HIGH             PORTA |=  0b00010000;
-#define A_STEP_LOW              PORTA &= ~0b00010000;
-
-#define B_STEP_HIGH             PORTC |=  0b00000010;
-#define B_STEP_LOW              PORTC &= ~0b00000010;
-
-#define C_STEP_HIGH             PORTL |=  0b00000100;
-#define C_STEP_LOW              PORTL &= ~0b00000100;
-
 #define TIMER1_INTERRUPTS_ON    TIMSK1 |=  (1 << OCIE1A);
 #define TIMER1_INTERRUPTS_OFF   TIMSK1 &= ~(1 << OCIE1A);
 
-const byte numChars = 32;
-char receivedChars[numChars];
-char tempChars[numChars];
-
-// char command[numChars] = 0;
-int xCom = 0;
-int yCom = 0;
-int zCom = 0;
-int aCom = 0;
-int bCom = 0;
-int cCom = 0;
-
-boolean newData = false;
+// Hold the current locaiton of the steppers
+int x_loc = 0;
+int y_loc = 0;
+int z_loc = 0;
+int a_loc = 0;
+int b_loc = 0;
+int c_loc = 0;
 
 //steps per mm
 int XstepRate = 1;
@@ -181,12 +166,7 @@ volatile stepperInfo steppers[NUM_STEPPERS];
 
 void setup() {
   Serial.begin(9600);
-  int xloc = 0;
-  int yloc = 0;
-  int zloc = 0;
-  int aloc = 0;
-  int bloc = 0;
-  int cloc = 0;
+  
 
   pinMode(X_STEP_PIN,   OUTPUT);
   pinMode(X_DIR_PIN,    OUTPUT);
@@ -444,7 +424,14 @@ void moveStepper(int motor_step_pin, int steps, int interval) {
   }
 }
 
-void goHome2() {
+// void smoothHome() {
+//   movePKM(-x_loc, -y_loc, -z_loc, -a_loc, -b_loc, -c_loc);
+//   // movePKM(10, 10, 10, 10, 10, 10);
+//   goHome2();
+// }
+
+void goHome() {
+  movePKM(-x_loc, -y_loc, -z_loc, -a_loc, -b_loc, -c_loc);
   while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
          digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
          digitalRead(LIMIT_SWITCH_M5) == HIGH || digitalRead(LIMIT_SWITCH_M6) == HIGH) {
@@ -454,7 +441,7 @@ void goHome2() {
     int ls4 = digitalRead(LIMIT_SWITCH_M4);
     int ls5 = digitalRead(LIMIT_SWITCH_M5);
     int ls6 = digitalRead(LIMIT_SWITCH_M6);
-    // Serial.println("Homing...");
+
     if (ls1 == HIGH) {
       prepareMovement( 0, 10);
     } 
@@ -478,6 +465,13 @@ void goHome2() {
     }
     runAndWait();
   }
+  // Reset step counts to zero (home)
+  x_loc = 0;
+  y_loc = 0;
+  z_loc = 0;
+  a_loc = 0;
+  b_loc = 0;
+  c_loc = 0;
   Serial.println("Homing Complete");
 }
 
@@ -487,6 +481,13 @@ void movePKM(int x, int y, int z, int a, int b, int c) {
   move the steppers x, y, z, a, b, c millimeters
   steps = dist * steprate
   */
+  x_loc += x;
+  y_loc += y;
+  z_loc += z;
+  a_loc += a;
+  b_loc += b;
+  c_loc += c;
+
   if (x != 0) {
     prepareMovement( 0, -x * XstepRate);
   }
@@ -510,6 +511,9 @@ void movePKM(int x, int y, int z, int a, int b, int c) {
 }
 
 void loop() {
+  // while(checkEstop()) {
+  //   delay(10);
+  // }
   parseCommand();
 }
 
@@ -526,50 +530,74 @@ void parseCommand() {
 
   while (Serial.available() == 0) {
       //wait for command;
-    }
+  }
 
-    char buf = Serial.read();
-    
-    if (buf == 'H') {
-      // Serial.println("Going Home!");
-      goHome2();
+  char buf = Serial.read();
+  
+  if (buf == 'H') {
+    goHome();
+    // smoothHome();
+  }
+  
+  else if (buf == 'G') {  
 
-    }
-    
-    else if (buf == 'G') {  
+    char com[64];
+    int loc = 0;
 
-      char com[64];
-      int loc = 0;
+    delay(100);
+    while (Serial.available() > 0) {
 
-      delay(100);
-      while (Serial.available() > 0) {
+      char buf2 = Serial.read();
 
-        char buf2 = Serial.read();
+      if (buf2 == '\n') {
+        com[loc] = '\0';
 
-        if (buf2 == '\n') {
-          com[loc] = '\0';
-
-          loc = 0;
-        }
-        else {
-          com[loc] = buf2;
-          ++loc;          
-        }
-                
+        loc = 0;
       }
-    
-      char *tknInd;
-      char *buffer;
-      char **rem;
-      tknInd = strtok(com, " ");
-      commands[0] = atoi(tknInd);
-      for (int i = 1; i < 6; ++i) {
-          tknInd = strtok(NULL, " ");
-          commands[i] = atoi(tknInd);  
+      else {
+        com[loc] = buf2;
+        ++loc;          
       }
-      movePKM(commands[0], commands[1], commands[2], commands[3], commands[4], commands[5]);
-      Serial.println("Move Complete");
+              
     }
+  
+    char *tknInd;
+    char *buffer;
+    char **rem;
+    tknInd = strtok(com, " ");
+    commands[0] = atoi(tknInd);
+    for (int i = 1; i < 6; ++i) {
+        tknInd = strtok(NULL, " ");
+        commands[i] = atoi(tknInd);  
+    }
+    movePKM(commands[0], commands[1], commands[2], commands[3], commands[4], commands[5]);
+    Serial.println("Move Complete");
+  } else if (buf == 'P') {
+    printLoc();
+  }
+}
+
+void printLoc() {
+  // Serial.print("");
+  Serial.print(x_loc);
+  Serial.print(", ");
+  Serial.print(y_loc);
+  Serial.print(", ");
+  Serial.print(z_loc);
+  Serial.print(", ");
+  Serial.print(a_loc);
+  Serial.print(", ");
+  Serial.print(b_loc);
+  Serial.print(", ");
+  Serial.println(c_loc);
+  // printout the current step counts of each motor
+  return 0;
+}
+
+
+bool checkEstop() {
+  // Read from e stop pin and return the result
+  return 1;
 }
 
 
