@@ -5,44 +5,49 @@
 // Commands:
 //    H - Go home
 //    G x y z a b c - move PKM
+//    A 
 //    P - printout the current location of the PKM
 
 // original Stepper Moter move function code from https://www.youtube.com/watch?v=fHAO7SW-SZI || http://www.iforce2d.net/sketches/
 
 
 // Pin assignments will need to change when the shield is used
-#define X_DIR_PIN          22 // PORTB pin 3
-#define X_STEP_PIN         23
-#define X_ENABLE_PIN       4
-#define LIMIT_SWITCH_M1    2
+#define X_STEP_PIN         5
+#define X_DIR_PIN          6 // PORTB pin 3
+#define X_ENABLE_PIN       7
+#define LIMIT_SWITCH_M1    63
 
-#define Y_DIR_PIN          24
-#define Y_STEP_PIN         25
-#define Y_ENABLE_PIN       7
-#define LIMIT_SWITCH_M2    3
+#define Y_STEP_PIN         8
+#define Y_DIR_PIN          9
+#define Y_ENABLE_PIN       10
+#define LIMIT_SWITCH_M2    64
 
-#define Z_DIR_PIN          26
-#define Z_STEP_PIN         27
-#define Z_ENABLE_PIN       10
-#define LIMIT_SWITCH_M3    4
+#define Z_STEP_PIN         11
+#define Z_DIR_PIN          12
+#define Z_ENABLE_PIN       13
+#define LIMIT_SWITCH_M3    65
 
-#define A_DIR_PIN          28
-#define A_STEP_PIN         29
-#define A_ENABLE_PIN       13
-#define LIMIT_SWITCH_M4    5
+#define A_STEP_PIN         54
+#define A_DIR_PIN          55
+#define A_ENABLE_PIN       56
+#define LIMIT_SWITCH_M4    66
 
-#define B_DIR_PIN          30
-#define B_STEP_PIN         31
-#define B_ENABLE_PIN       16
-#define LIMIT_SWITCH_M5    6
+#define B_STEP_PIN         57
+#define B_DIR_PIN          58
+#define B_ENABLE_PIN       59
+#define LIMIT_SWITCH_M5    67
 
-#define C_DIR_PIN          32
-#define C_STEP_PIN         33
-#define C_ENABLE_PIN       19
-#define LIMIT_SWITCH_M6    7
+#define C_STEP_PIN         60
+#define C_DIR_PIN          61
+#define C_ENABLE_PIN       62
+#define LIMIT_SWITCH_M6    68
+
+#define EstopPin           69
 
 #define TIMER1_INTERRUPTS_ON    TIMSK1 |=  (1 << OCIE1A);
 #define TIMER1_INTERRUPTS_OFF   TIMSK1 &= ~(1 << OCIE1A);
+
+#define stepLimit       10000
 
 // Hold the current locaiton of the steppers
 int x_loc = 0;
@@ -53,12 +58,12 @@ int b_loc = 0;
 int c_loc = 0;
 
 //steps per mm
-int XstepRate = 1;
-int YstepRate = 1;
-int ZstepRate = 1;
-int AstepRate = 1;
-int BstepRate = 1;
-int CstepRate = 1;
+float XstepRate = 50;
+float YstepRate = 50;
+float ZstepRate = 50;
+float AstepRate = 50;
+float BstepRate = 50;
+float CstepRate = 50;
 
 struct stepperInfo {
   // externally defined parameters
@@ -166,6 +171,9 @@ volatile stepperInfo steppers[NUM_STEPPERS];
 
 void setup() {
   Serial.begin(9600);
+  while(!Serial.available());
+
+  int accel = 250; // low is faster
   
 
   pinMode(X_STEP_PIN,   OUTPUT);
@@ -205,6 +213,7 @@ void setup() {
   pinMode(LIMIT_SWITCH_M4, INPUT_PULLUP);
   pinMode(LIMIT_SWITCH_M5, INPUT_PULLUP);
   pinMode(LIMIT_SWITCH_M6, INPUT_PULLUP);
+  pinMode(EstopPin, INPUT_PULLUP);
 
   noInterrupts();
   TCCR1A = 0;
@@ -218,33 +227,39 @@ void setup() {
 
   steppers[0].dirFunc = xDir;
   steppers[0].stepFunc = xStep;
-  steppers[0].acceleration = 2500;
+  steppers[0].acceleration = accel;
   steppers[0].minStepInterval = 50;
 
   steppers[1].dirFunc = yDir;
   steppers[1].stepFunc = yStep;
-  steppers[1].acceleration = 2500;
+  steppers[1].acceleration = accel;
   steppers[1].minStepInterval = 50;
 
   steppers[2].dirFunc = zDir;
   steppers[2].stepFunc = zStep;
-  steppers[2].acceleration = 2500;
+  steppers[2].acceleration = accel;
   steppers[2].minStepInterval = 50;
 
   steppers[3].dirFunc = aDir;
   steppers[3].stepFunc = aStep;
-  steppers[3].acceleration = 2500;
+  steppers[3].acceleration = accel;
   steppers[3].minStepInterval = 50;
 
   steppers[4].dirFunc = bDir;
   steppers[4].stepFunc = bStep;
-  steppers[4].acceleration = 2500;
+  steppers[4].acceleration = accel;
   steppers[4].minStepInterval = 50;
 
   steppers[5].dirFunc = cDir;
   steppers[5].stepFunc = cStep;
-  steppers[5].acceleration = 2500;
+  steppers[5].acceleration = accel;
   steppers[5].minStepInterval = 50;
+  
+
+  Serial.println("PKM-Started: Awaiting command");
+  Serial.println("Enter: G XX YY ZZ AA BB CC (mm->0.02) to command a movement");
+  Serial.println("P - print current position in steps.");
+  Serial.println("H - Move to home position");
 }
 
 void resetStepper(volatile stepperInfo& si) {
@@ -424,14 +439,20 @@ void moveStepper(int motor_step_pin, int steps, int interval) {
   }
 }
 
-// void smoothHome() {
-//   movePKM(-x_loc, -y_loc, -z_loc, -a_loc, -b_loc, -c_loc);
-//   // movePKM(10, 10, 10, 10, 10, 10);
-//   goHome2();
-// }
+void setAccel(int acc) {
+  for (int i = 0; i < 6; ++i) {
+    steppers[i].acceleration = acc;
+  }
+}
 
 void goHome() {
-  movePKM(-x_loc, -y_loc, -z_loc, -a_loc, -b_loc, -c_loc);
+
+  movePKM(-abs(x_loc), -abs(y_loc), -abs(z_loc), -abs(a_loc), -abs(b_loc), -abs(c_loc));
+
+
+  setAccel(5000);
+  
+  
   while (digitalRead(LIMIT_SWITCH_M1) == HIGH || digitalRead(LIMIT_SWITCH_M2) == HIGH || 
          digitalRead(LIMIT_SWITCH_M3) == HIGH || digitalRead(LIMIT_SWITCH_M4) == HIGH || 
          digitalRead(LIMIT_SWITCH_M5) == HIGH || digitalRead(LIMIT_SWITCH_M6) == HIGH) {
@@ -465,21 +486,70 @@ void goHome() {
     }
     runAndWait();
   }
-  // Reset step counts to zero (home)
+  
+
+  
   x_loc = 0;
   y_loc = 0;
   z_loc = 0;
   a_loc = 0;
   b_loc = 0;
   c_loc = 0;
+  
+  setAccel(250);
+  
   Serial.println("Homing Complete");
+}
+
+
+//Move the PKM by distance
+void moveDPKM(double x, double y, double z, double a, double b, double c, double v) {
+  // steps = dist * steprate
+  int minStep = 50;
+  int xSteps = round(x * XstepRate);
+  int ySteps = round(y * YstepRate);
+  int zSteps = round(z * ZstepRate);
+  int aSteps = round(a * AstepRate);
+  int bSteps = round(b * BstepRate);
+  int cSteps = round(c * CstepRate);
+
+  if (v != 0) {
+    minStep = calculateMinStep(v);//find min number////
+  } 
+    
+
+  for (int i = 0; i < 6; ++i) {
+    steppers[i].minStepInterval = minStep;
+  }
+  // if ((xSteps + x_loc) > stepLimit) {
+  //   xSteps = stepLimit - x_loc;
+  // }
+  
+  movePKM(xSteps, ySteps, zSteps, a * AstepRate, b * BstepRate, c * CstepRate);
+}
+
+
+int calculateMinStep(double speed) {
+  if (speed < 1) {
+    speed = 1;
+  }
+  // calculate the min step int off of the max speed
+  // 62500
+  // int minStep = 31250 / ( XstepRate * speed); //This eqaution needs to be tuned!
+  int minStep = (14.1*speed*speed - 2946*speed + 132000) / 1000;
+  // int minStep = -1621*speed+101860
+  if (minStep < 1) {
+    minStep = 2;
+  }
+  // Serial.println(minStep);
+  return minStep;
 }
 
 
 void movePKM(int x, int y, int z, int a, int b, int c) {
   /*
-  move the steppers x, y, z, a, b, c millimeters
-  steps = dist * steprate
+  move the steppers x, y, z, a, b, c setps
+  
   */
   x_loc += x;
   y_loc += y;
@@ -489,22 +559,22 @@ void movePKM(int x, int y, int z, int a, int b, int c) {
   c_loc += c;
 
   if (x != 0) {
-    prepareMovement( 0, -x * XstepRate);
+    prepareMovement( 0, -x);
   }
   if (y != 0) {
-    prepareMovement( 1, -y * YstepRate);
+    prepareMovement( 1, -y);
   }
   if (z != 0) {
-    prepareMovement( 2, -z * ZstepRate);
+    prepareMovement( 2, -z);
   }
   if (a != 0) {
-    prepareMovement( 3, -a * AstepRate);
+    prepareMovement( 3, -a);
   }
   if (b != 0) {
-    prepareMovement( 4, -b * BstepRate);
+    prepareMovement( 4, -b);
   }
   if (c != 0) {
-    prepareMovement( 5, -c * CstepRate);
+    prepareMovement( 5, -c);
   }
   
   runAndWait();
@@ -515,6 +585,11 @@ void loop() {
   //   delay(10);
   // }
   parseCommand();
+  
+  // else {
+  //   Serial.println("Currently Estoped!");
+  //   delay(50)
+  // }
 }
 
 
@@ -522,7 +597,7 @@ void parseCommand() {
   static byte index = 0;
   char endMarker = '\n';
   char command;
-  int commands[6];
+  float commands[6];
 
   
   static char num[64];
@@ -565,15 +640,105 @@ void parseCommand() {
     char *buffer;
     char **rem;
     tknInd = strtok(com, " ");
-    commands[0] = atoi(tknInd);
+    commands[0] = atof(tknInd);
+    
     for (int i = 1; i < 6; ++i) {
         tknInd = strtok(NULL, " ");
-        commands[i] = atoi(tknInd);  
+        commands[i] = atof(tknInd);
+         
     }
-    movePKM(commands[0], commands[1], commands[2], commands[3], commands[4], commands[5]);
+    float speed = atof(strtok(NULL, " "));
+    
+    moveDPKM(commands[0], commands[1], commands[2], commands[3], commands[4], commands[5], speed);
+    
+  } 
+  
+  else if (buf == 'A') {  
+
+    char com[64];
+    int loc = 0;
+
+    delay(100); //maybe this is why it's so slow?
+    while (Serial.available() > 0) {
+
+      char buf2 = Serial.read();
+
+      if (buf2 == '\n') {
+        com[loc] = '\0';
+
+        loc = 0;
+      }
+      else {
+        com[loc] = buf2;
+        ++loc;          
+      }
+              
+    }
+    int locs[6];
+    locs[0] = x_loc;
+    locs[1] = y_loc;
+    locs[2] = z_loc;
+    locs[3] = a_loc;
+    locs[4] = b_loc;
+    locs[5] = c_loc;
+    char *tknInd;
+    char *buffer;
+    char **rem;
+    tknInd = strtok(com, " ");
+    commands[0] = atof(tknInd) - locs[0];
+    
+    for (int i = 1; i < 6; ++i) {
+        tknInd = strtok(NULL, " ");
+        commands[i] = atof(tknInd) - locs[i];
+         
+    }
+    float speed = atof(strtok(NULL, " "));
+    
+      moveDPKM(commands[0], commands[1], commands[2], commands[3], commands[4], commands[5], speed);
     Serial.println("Move Complete");
+
+
   } else if (buf == 'P') {
     printLoc();
+  } else if (buf == 'R') {
+    for (int i = 0; i < 6; ++i) {
+      x_loc = 0;
+      y_loc = 0;
+      z_loc = 0;
+      a_loc = 0;
+      b_loc = 0;
+      c_loc = 0;
+    }
+
+    
+  } else if (buf == 'D') {  
+
+    char com[64];
+    int loc = 0;
+
+    delay(100);
+    while (Serial.available() > 0) {
+
+      char buf2 = Serial.read();
+
+      if (buf2 == '\n') {
+        com[loc] = '\0';
+
+        loc = 0;
+      }
+      else {
+        com[loc] = buf2;
+        ++loc;          
+      }
+              
+    }
+  
+    char *tknInd;
+    char *buffer;
+    char **rem;
+    tknInd = strtok(com, " ");
+    int mode = atoi(tknInd);
+    demo(mode);
   }
 }
 
@@ -596,8 +761,24 @@ void printLoc() {
 
 
 bool checkEstop() {
+  int Estop = digitalRead(EstopPin);
   // Read from e stop pin and return the result
-  return 1;
+  return Estop;
+}
+
+void demo(int mode) {
+  goHome();
+  if (mode == 1) {
+    moveDPKM(100, 100, 100, 100, 100, 100, 40);
+    moveDPKM(30, 30, 0, 0, -30, -30, 40);
+    moveDPKM(-60, -60, 0, 0, 60, 60, 40);
+    moveDPKM(30, 30, 0, 0, -30, -30, 40);
+    moveDPKM(40, 40, -30, -30, 40, 40, 40);
+    moveDPKM(-40, -40, 30, 30, -40, -40, 40);
+  }
+  goHome();
+  
+
 }
 
 
